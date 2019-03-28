@@ -1,8 +1,8 @@
-
 import itertools
 import os
 
 import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
 import pytz
 import zipline
@@ -172,3 +172,29 @@ def adjust_positions_by_target_percent(context, data):
     for stock, target_percent in context.traded_stocks_target_percent.items():
         if target_percent != 0:
             zipline.api.order_target_percent(stock, target_percent)
+
+
+def draw_cointegration(pair, data, selected_weights, window_size, start_date, end_date):
+    plt.figure(figsize=(20, 10))
+
+    data[list(pair)] * selected_weights
+    pair_value = (data[list(pair)] * selected_weights).sum(axis=1)
+    mean_values = pair_value.rolling(window_size).mean()
+    std_values = pair_value.rolling(window_size).std()
+
+    pair_value = pair_value.loc[start_date:end_date]
+    mean_values = mean_values.loc[start_date:end_date]
+    std_values = std_values.loc[start_date:end_date]
+
+    std_up = mean_values + 2 * std_values
+    std_down = mean_values - 2 * std_values
+
+    pair_value.plot(label="Cointegrating Combination")
+    std_up.plot(label="2 std above the mean", style="--", alpha=1)
+    std_down.plot(label="2 std below the mean", style="--", alpha=1)
+    plt.title(f"{pair} cointegrating combination")
+    mean_values.plot(label="1 Hour Rolling Mean")
+    plt.rcParams.update({'font.size': 20})
+    plt.legend(prop={'size': 15})
+    plt.grid()
+    plt.show()
