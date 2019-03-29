@@ -47,6 +47,8 @@ On the next line you see `2018-03-11 00:48:00` it is current date and minute in 
 
 4. Type `int_number` - skip `int_number` minutes
 
+5. Type `stop` to close demo
+
 
 
 
