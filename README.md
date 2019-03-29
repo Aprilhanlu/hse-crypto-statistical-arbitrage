@@ -20,3 +20,6 @@ This repository contains a demo version of a recomender system for cryptocurrenc
 
 6. Type in terminal `python3 demo.py`
 
+You will see something like this:
+
+![Alt text](media/rec_system_demo.png)
