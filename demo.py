@@ -132,7 +132,7 @@ def do_trading(i):
     hedging_weights = prices * assets_weighs
     hedging_weights /= np.absolute(hedging_weights).sum()
 
-    print(action, cur_pos, is_opened_position, hedging_weights, position, usd_pos)
+    print(f"Your current position: {position}")
     if action == "stop":
         sys.exit()
     elif action == "buy" and cur_pos != "Long":
