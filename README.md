@@ -24,4 +24,4 @@ You will see something like this:
 
 ![Alt text](media/rec_system_demo.png)
 
-Here on the screenshot, you trade ETH-USD and BTH-USD cointegrating set, its price is showed on the top left graph. When current price is above the green dashed line it is a signal to sell, when it is bellow it is a signal to buy. On the top right graph, your current portfolio value is shown. On the graphs below ETH-USD and BCH-USD prices are shown. 
+Here on the screenshot, you trade ETH-USD and BTH-USD cointegrating set, its price is showed on the top left graph as the blue line. When current price is above the green dashed line it is a signal to short or sell, when it is bellow it is a signal to buy. On the top right graph, your current portfolio value is shown. On the graphs below ETH-USD and BCH-USD prices are shown. 
