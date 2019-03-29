@@ -10,3 +10,13 @@ This repository contains a demo version of a recomender system for cryptocurrenc
 
 1. Clone the repository
 
+2. Type in terminal `python3 -m virtualenv env`
+
+3. Type in terminal `source env/bin/activate`
+
+4. Type in terminal `pip3 install --upgrade pip`
+
+5. Type in terminal `pip3 install -r requirements.txt`
+
+6. Type in terminal `python3 demo.py`
+
