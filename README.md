@@ -1,4 +1,4 @@
-# Recomender System for Cryptocurrencies Arbitrage
+# Recommender System for Cryptocurrencies Arbitrage
 
 **Video of demo** https://youtu.be/Lsiq9VV6uO8
 
