@@ -31,7 +31,7 @@ def file_names_to_tickers(file_names):
     return list(map(lambda x: x[:-4], file_names))
 
 
-def combine_market_data(folder, market_name, column, is_cut_nas=False, file_names_to_exclude=None):
+def combine_market_data(folder, market_name, column, is_cut_nas=False, file_names_to_exclude=None, is_interpolate=True):
     file_names_to_exclude = file_names_to_exclude or []
     market = list_market(folder, market_name, False)
     market = [file_name for file_name in market if file_name not in file_names_to_exclude]
@@ -43,12 +43,13 @@ def combine_market_data(folder, market_name, column, is_cut_nas=False, file_name
     ticker_names = file_names_to_tickers(market)
     data = pd.concat(serieses, axis=1, join="outer")
     data.columns = ticker_names
-    data = data.resample("1min").mean()
-    data = data.interpolate()
+
+    if is_interpolate:
+        data = data.interpolate()
 
     if is_cut_nas:
         data.dropna(inplace=True)
-
+    data = data.resample("1min").mean()
     return data
 
 
@@ -177,7 +178,6 @@ def adjust_positions_by_target_percent(context, data):
 def draw_cointegration(pair, data, selected_weights, window_size, start_date, end_date):
     plt.figure(figsize=(20, 10))
 
-    data[list(pair)] * selected_weights
     pair_value = (data[list(pair)] * selected_weights).sum(axis=1)
     mean_values = pair_value.rolling(window_size).mean()
     std_values = pair_value.rolling(window_size).std()
