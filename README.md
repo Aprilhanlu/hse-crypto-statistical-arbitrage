@@ -1,5 +1,7 @@
 # Recomender System for Cryptocurrencies Arbitrage
 
+**Video of demo** https://youtu.be/Lsiq9VV6uO8
+
 This repository contains a demo version of a recommender system for cryptocurrencies arbitrage. The recommender system is based on plain Pair Trading strategy.
 
 `Research Pair Trading Opportunities.ipynb` is a brief overview of research devoted to searching cointegrated sets of stock. 
