@@ -1,13 +1,16 @@
 import itertools
 import os
+from itertools import combinations
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytz
-import zipline
+import statsmodels.api as sm
 from collections import defaultdict
 from tqdm import tqdm_notebook
+from statsmodels.tsa.stattools import coint
+from statsmodels.regression.linear_model import OLS
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
 
@@ -36,6 +39,7 @@ def combine_market_data(folder, market_name, column, is_cut_nas=False, file_name
     market = list_market(folder, market_name, False)
     market = [file_name for file_name in market if file_name not in file_names_to_exclude]
     serieses = []
+    print(market)
     for pair in market:
         pair_data = pd.read_csv(f"{folder}{pair}", index_col="time", parse_dates=["time"])
         serieses.append(pair_data[column])
@@ -44,26 +48,28 @@ def combine_market_data(folder, market_name, column, is_cut_nas=False, file_name
     data = pd.concat(serieses, axis=1, join="outer")
     data.columns = ticker_names
 
-    if is_interpolate:
-        data = data.interpolate()
-
     if is_cut_nas:
         data.dropna(inplace=True)
+
     data = data.resample("1min").mean()
+
+    if is_interpolate:
+        data = data.interpolate(method="linear")
+
     return data
 
 
-def create_zipline_panel(files_path, pairs, min_order_size):
+def create_zipline_panel(files_path, pairs, min_sizes):
+
     if not pairs[0].endswith(".csv"):
-        pairs = map(lambda x: x + ".csv", pairs)
+        pairs_files = map(lambda x: x + ".csv", pairs)
     data = dict()
-    for pair in pairs:
-        pair_data = pd.read_csv(f"{files_path}{pair}", index_col="time", parse_dates=["time"])
+    for pair_file, pair_name in zip(pairs_files, pairs):
+        pair_data = pd.read_csv(f"{files_path}{pair_file}", index_col="time", parse_dates=["time"])
         pair_data.index.name = "date"
         pair_data = pair_data.resample("1min").mean()
-        pair_data.loc[:, "volume"] /= min_order_size
-        pair_data.loc[:, ["open", "high", "low", "close"]] *= min_order_size
-        pair_name = pair[:-4]
+        pair_data.loc[:, "volume"] = round(pair_data.loc[:, "volume"] / min_sizes[pair_name])
+        pair_data.loc[:, ["open", "high", "low", "close"]] *= min_sizes[pair_name]
         data[pair_name] = pair_data
 
     panel = pd.Panel(data)
@@ -97,20 +103,20 @@ def find_pairs(prices, coint_set_amount, johansen_lag):
     return result
 
 
-def estimate_pairs_z_score(data, pairs_coint_weights, pairs_to_calc, window_size):
-    pairs_z_scores = dict()
-    for pair in pairs_to_calc:
-        weights = pairs_coint_weights[pair]
-        pair_sids = list(map(lambda x: zipline.api.symbol(x), pair))
-        pair_values = data.history(pair_sids, fields="price", bar_count=window_size,
-                                   frequency="1m")
-        print(pair_values.iloc[0])
-        pair_values = (pair_values * weights).sum(axis=1)
-        pair_values.interpolate(limit_direction="both", inplace=True)
-        z_score = (pair_values[-1] - pair_values.mean()) / pair_values.std()
-        pairs_z_scores[pair] = z_score
-
-    return pairs_z_scores
+# def estimate_pairs_z_score(data, pairs_coint_weights, pairs_to_calc, window_size):
+#     pairs_z_scores = dict()
+#     for pair in pairs_to_calc:
+#         weights = pairs_coint_weights[pair]
+#         pair_sids = list(map(lambda x: zipline.api.symbol(x), pair))
+#         pair_values = data.history(pair_sids, fields="price", bar_count=window_size,
+#                                    frequency="1m")
+#         print(pair_values.iloc[0])
+#         pair_values = (pair_values * weights).sum(axis=1)
+#         pair_values.interpolate(limit_direction="both", inplace=True)
+#         z_score = (pair_values[-1] - pair_values.mean()) / pair_values.std()
+#         pairs_z_scores[pair] = z_score
+#
+#     return pairs_z_scores
 
 
 def filter_pairs_by_z_score(context, data, pairs_z_scores):
@@ -169,10 +175,10 @@ def capital_weights(pairs_z_scores, selected_pairs, pairs_coint_weights):
     return assets_weights, asset_in_pair_weights
 
 
-def adjust_positions_by_target_percent(context, data):
-    for stock, target_percent in context.traded_stocks_target_percent.items():
-        if target_percent != 0:
-            zipline.api.order_target_percent(stock, target_percent)
+# def adjust_positions_by_target_percent(context, data):
+#     for stock, target_percent in context.traded_stocks_target_percent.items():
+#         if target_percent != 0:
+#             zipline.api.order_target_percent(stock, target_percent)
 
 
 def draw_cointegration(pair, data, selected_weights, window_size, start_date, end_date):
@@ -198,3 +204,114 @@ def draw_cointegration(pair, data, selected_weights, window_size, start_date, en
     plt.legend(prop={'size': 15})
     plt.grid()
     plt.show()
+
+
+def research_pair_trading_opportunity(currency1, currency2):
+    name1, name2 = currency1.name, currency2.name
+    print(f"Researching Pair {name1} and {name2}")
+    model = OLS(currency1, sm.add_constant(currency2))
+    ols_results = model.fit()
+    print("Prices OLS results:")
+    print(f"const: {ols_results.params['const']} || {name2} {ols_results.params[name2]}")
+
+    coint_series = currency1 - currency2 * ols_results.params[name2]
+    coint_series.plot()
+    plt.show()
+
+    dependent_var = coint_series.diff()[1:]
+    independent_var = coint_series.shift(1)[1:]
+    independent_var.name = "val_prev"
+    model = OLS(dependent_var, sm.add_constant(independent_var))
+    ols_results = model.fit()
+    ols_results.params
+
+    print("Diff of Cointegrating Series OLS Results:")
+    print(f"const: {ols_results.params['const']} || {ols_results.params['val_prev']}")
+    print("Mean-Reverse Half-life:", -np.log(2) / ols_results.params["val_prev"])
+
+
+def check_serieses_pairs_for_cointegration(data, is_print_test_statistic=True, is_print_p_value=True,
+                                           is_print_critical_value=True):
+    for currencies_combination in combinations(data.columns.values, 2):
+        pair1 = currencies_combination[0]
+        pair2 = currencies_combination[1]
+        coint_results = coint(data[pair1], data[pair2], maxlag=1)
+        print("--------------------------")
+        print(f"Pair {pair1} and {pair2}")
+        if is_print_test_statistic:
+            print("Test Statistic:", coint_results[0])
+        if is_print_p_value:
+            print("P-Value:", coint_results[1])
+        if is_print_critical_value:
+            print("Critical values:", coint_results[2])
+
+
+def upload_currency_data(path, start_date, end_date):
+    currency = pd.read_csv(path, index_col="time", parse_dates=["time"])
+    currency = currency.loc[start_date:end_date]
+    currency["usd_vol"] = currency["close"] * currency["volume"]
+    currency = currency.resample("min").mean()
+
+    return currency
+
+
+def sample_pair_as_dollar_bars(currency1_path, currency2_path, start_date, end_date, dollar_bar_size):
+    currency1_data = upload_currency_data(currency1_path, start_date, end_date)
+    currency2_data = upload_currency_data(currency2_path, start_date, end_date)
+
+    currencies_new_data = [[["time_start", "time_end", "open", "high", "low", "close", "volume", "usd_vol"]],
+                           [["time_start", "time_end", "open", "high", "low", "close", "volume", "usd_vol"]]]
+    bar_start, bar_end = None, None
+    current_usd_vol_traded = 0
+    open_prices, high_prices, low_prices, close_prices, volumes = [], [-np.inf] * 2, [np.inf] * 2, [], [0] * 2
+    dollar_volumes = [0] * 2
+    is_creating_bar = False
+    for index in tqdm_notebook(currency1_data.index):
+        if index > currency1_data.index[-1] or index > currency2_data.index[-1]:
+            break
+        currencies = currency1_data.loc[index], currency2_data.loc[index]
+        if not is_creating_bar and not np.isnan(currencies[0]["open"]) and not np.isnan(currencies[1]["open"]):
+            is_creating_bar = True
+            bar_start = index
+            for currency in currencies:
+                open_prices.append(currency["open"])
+        if is_creating_bar:
+            for currency_index, currency in enumerate(currencies):
+                if not np.isnan(currency["high"]):
+                    high_prices[currency_index] = max(high_prices[currency_index], currency["high"])
+                if not np.isnan(currency["low"]):
+                    low_prices[currency_index] = min(low_prices[currency_index], currency["low"])
+                if not np.isnan(currency["volume"]):
+                    volumes[currency_index] += currency["volume"]
+                if not np.isnan(currency["usd_vol"]):
+                    current_usd_vol_traded += currency["usd_vol"]
+                    dollar_volumes[currency_index] += currency["usd_vol"]
+            if current_usd_vol_traded > dollar_bar_size and not np.isnan(currencies[0]["close"]) and\
+                    not np.isnan(currencies[1]["close"]):
+                bar_end = index
+                for currency in currencies:
+                    close_prices.append(currency["close"])
+                for currency_index in range(2):
+                    new_row = [bar_start, bar_end, open_prices[currency_index], high_prices[currency_index],
+                               low_prices[currency_index], close_prices[currency_index], volumes[currency_index],
+                               dollar_volumes[currency_index]]
+                    currencies_new_data[currency_index].append(new_row)
+                is_creating_bar = False
+                current_usd_vol_traded = 0
+                open_prices, high_prices = [], [-np.inf] * 2
+                low_prices, close_prices, volumes = [np.inf] * 2, [], [0] * 2
+                dollar_volumes = [0] * 2
+
+    currency1_df = pd.DataFrame(currencies_new_data[0][1:], columns=currencies_new_data[0][0])
+    currency2_df = pd.DataFrame(currencies_new_data[1][1:], columns=currencies_new_data[1][0])
+    currency1_df.set_index("time_start", inplace=True)
+    currency2_df.set_index("time_start", inplace=True)
+
+    return currency1_df, currency2_df
+
+
+if __name__ == "__main__":
+    RESEARCH_START_DATE = pd.Timestamp("2018-03-01")
+    COINTEGRATION_RESEARCH_DATE = pd.Timestamp("2018-03-10")
+    result = sample_pair_as_dollar_bars("candles/ETH-USD.csv", "candles/BTC-USD.csv", RESEARCH_START_DATE,
+                                        COINTEGRATION_RESEARCH_DATE, 100000)
